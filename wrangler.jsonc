@@ -9,6 +9,6 @@
   "vars": {
     // Comma-separated hostnames this server may fetch.
     // Empty or missing means every request is denied (fail closed).
-    "ALLOWED_HOSTS": "example.com,cloudflare.com"
+    "ALLOWED_HOSTS": "example.com,cloudflare.com,devenperkins.com"
   }
 }
