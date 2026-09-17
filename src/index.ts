@@ -33,7 +33,7 @@ function createServer(env: Env): McpServer {
       outputSchema: z.object({
         url: z.string(),
         status: z.number().int(),
-        redirectTo: z.string().nullable(),
+        redirectTo: z.union([z.string(), z.literal(null)]),
         present: z.array(z.string()),
         missing: z.array(z.string()),
       }),
