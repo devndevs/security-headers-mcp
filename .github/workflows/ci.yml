@@ -1,0 +1,90 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# Least privilege for the built-in GITHUB_TOKEN: read the code, nothing else.
+permissions:
+  contents: read
+
+jobs:
+  check:
+    # This job name is the status check you require in the ruleset.
+    name: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # A new push to a pull request cancels its outdated check run.
+    concurrency:
+      group: check-${{ github.ref }}
+      cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type check
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
+
+      - name: Bundle (deploy dry run, no credentials)
+        run: npx wrangler deploy --dry-run
+
+  deploy:
+    name: deploy
+    needs: check
+    # Only a push to main deploys. Pull requests never reach this job.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Deploy credentials live only in this environment, which only main can use.
+    environment:
+      name: production
+      url: ${{ steps.deploy.outputs.deployment-url || vars.WORKER_URL }}
+    # Two merges in a row queue up instead of deploying over each other.
+    concurrency:
+      group: production-deploy
+      cancel-in-progress: false
+    steps:
+      - name: Check out code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          # No shared dependency cache in the job that holds deploy credentials.
+          package-manager-cache: false
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Deploy to Cloudflare Workers
+        id: deploy
+        uses: cloudflare/wrangler-action@ebbaa1584979971c8614a24965b4405ff95890e0 # v4.0.0
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          # Every production version traces back to a commit.
+          command: deploy --message "CI deploy ${{ github.sha }}"
+
+      - name: Smoke test the live endpoint
+        env:
+          BASE_URL: ${{ steps.deploy.outputs.deployment-url || vars.WORKER_URL }}
+        run: bash scripts/smoke.sh "$BASE_URL"
