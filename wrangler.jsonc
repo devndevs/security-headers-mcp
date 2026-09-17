@@ -1,0 +1,14 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "security-headers-mcp",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["nodejs_compat"],
+  // Workers Logs: structured console.log output becomes queryable fields.
+  "observability": { "enabled": true },
+  "vars": {
+    // Comma-separated hostnames this server may fetch.
+    // Empty or missing means every request is denied (fail closed).
+    "ALLOWED_HOSTS": "example.com,cloudflare.com"
+  }
+}
