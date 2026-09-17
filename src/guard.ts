@@ -1,9 +1,6 @@
 // Policy layer: decides whether a target may be fetched at all.
 // Pure functions with no I/O, so every rule is unit-testable.
 
-export type TargetDecision =
-  | { allowed: true; url: URL }
-  | { allowed: false; reason: string };
 
 /** Parse a comma-separated hostname list. Empty or missing denies everything. */
 export function parseAllowlist(raw: string | undefined): ReadonlySet<string> {
