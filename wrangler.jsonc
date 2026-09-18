@@ -6,9 +6,24 @@
   "compatibility_flags": ["nodejs_compat"],
   // Workers Logs: structured console.log output becomes queryable fields.
   "observability": { "enabled": true },
-  "vars": {
-    // Comma-separated hostnames this server may fetch.
-    // Empty or missing means every request is denied (fail closed).
-    "ALLOWED_HOSTS": "example.com,cloudflare.com,devenperkins.com"
+"vars": {
+    "ALLOWED_HOSTS": "example.com,cloudflare.com",
+    // Access enforcement is off on this Worker. The auth environment turns it on.
+    "REQUIRE_ACCESS": "false",
+    "TEAM_DOMAIN": "",
+    "POLICY_AUD": ""
+  },
+  "env": {
+    // A SECOND Worker. `wrangler deploy --env auth` never touches the demo one.
+    // Named environments do not inherit top-level vars, so they are repeated here.
+    "auth": {
+      "name": "security-headers-mcp-auth",
+      "vars": {
+        "ALLOWED_HOSTS": "example.com,cloudflare.com",
+        "REQUIRE_ACCESS": "true",
+        "TEAM_DOMAIN": "https://devdevs.cloudflareaccess.com",
+        "POLICY_AUD": "451ab93dad41e449b2a5d573c6568b51e4f6ed109b100adbb71a5110380eb984"
+      }
+    }
   }
 }
