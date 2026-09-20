@@ -1,6 +1,9 @@
 // Policy layer: decides whether a target may be fetched at all.
 // Pure functions with no I/O, so every rule is unit-testable.
 
+/** Shared so the API can tell a malformed URL apart from a policy denial. */
+export const INVALID_URL_REASON = "not a valid URL";
+
 export type TargetDecision =
   | { allowed: true; url: URL }
   | { allowed: false; reason: string };
@@ -32,7 +35,7 @@ export function checkTarget(
   try {
     url = new URL(input);
   } catch {
-    return { allowed: false, reason: "not a valid URL" };
+    return { allowed: false, reason: INVALID_URL_REASON };
   }
 
   if (url.protocol !== "https:") {

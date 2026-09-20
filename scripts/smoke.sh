@@ -38,6 +38,13 @@ expect "off-list host is denied" "$body" 'Denied: host is not on the allowlist.'
 body=$(call '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"check_security_headers","arguments":{"url":"https://example.com/"}}}')
 expect "allowlisted host returns a report" "$body" '"status":200'
 
+# 4. The control panel is served and can read its own config.
+page=$(curl --silent --show-error --fail --max-time 20 "${BASE_URL%/}/")
+expect "control panel is served" "$page" "security-headers-mcp control panel"
+
+body=$(curl --silent --show-error --fail --max-time 20 "${BASE_URL%/}/api/config")
+expect "control panel reads live config" "$body" '"name":"check_security_headers"'
+
 if [ "$failures" -gt 0 ]; then
   echo "${failures} smoke check(s) failed"
   exit 1
