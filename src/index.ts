@@ -1,8 +1,11 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import { createMcpHandler } from "agents/mcp/server";
 import { z } from "zod";
+import { readAccessConfig, verifyAccessJwt, type AccessEnv } from "./access";
+import { configPayload, json, validateTarget } from "./api";
 import { checkTarget, hostForLog, parseAllowlist } from "./guard";
 import { fetchHeaderReport } from "./headers";
+import { controlPanelHtml } from "./ui";
 
 const TOOL = "check_security_headers";
 
@@ -11,7 +14,7 @@ function logCall(fields: Record<string, unknown>): void {
   console.log(JSON.stringify({ event: "tool_call", tool: TOOL, ...fields }));
 }
 
-function createServer(env: Env): McpServer {
+function createServer(env: Env, caller?: string): McpServer {
   const allowlist = parseAllowlist(env.ALLOWED_HOSTS);
 
   const server = new McpServer({
@@ -33,6 +36,8 @@ function createServer(env: Env): McpServer {
       outputSchema: z.object({
         url: z.string(),
         status: z.number().int(),
+        // anyOf branches, not type: ["string","null"]: some MCP clients read
+        // `type` as a single string and drop or reject the constraint.
         redirectTo: z.union([z.string(), z.literal(null)]),
         present: z.array(z.string()),
         missing: z.array(z.string()),
@@ -45,7 +50,7 @@ function createServer(env: Env): McpServer {
       const decision = checkTarget(url, allowlist);
 
       if (!decision.allowed) {
-        logCall({ decision: "deny", host: hostForLog(url), reason: decision.reason });
+        logCall({ caller, decision: "deny", host: hostForLog(url), reason: decision.reason });
         return {
           isError: true,
           content: [{ type: "text", text: `Denied: ${decision.reason}.` }],
@@ -56,6 +61,7 @@ function createServer(env: Env): McpServer {
       try {
         const report = await fetchHeaderReport(decision.url);
         logCall({
+          caller,
           decision: "allow",
           host,
           status: report.status,
@@ -68,6 +74,7 @@ function createServer(env: Env): McpServer {
         };
       } catch (error) {
         logCall({
+          caller,
           decision: "allow",
           host,
           outcome: "fetch_failed",
@@ -86,8 +93,62 @@ function createServer(env: Env): McpServer {
 }
 
 export default {
-  fetch(request, env, ctx) {
-    // A fresh server per request, with this request's env in scope.
-    return createMcpHandler(() => createServer(env))(request, env, ctx);
+  async fetch(request, env, ctx) {
+    // Enforcement is an explicit deployment decision. Once it is on, missing
+    // configuration denies every request instead of quietly serving them.
+    let caller: string | undefined;
+    if (env.REQUIRE_ACCESS === "true") {
+      const decision = await verifyAccessJwt(request, readAccessConfig(env as AccessEnv));
+      if (!decision.ok) {
+        console.log(JSON.stringify({ event: "access_denied", reason: decision.reason }));
+        return new Response("Forbidden", { status: 403 });
+      }
+      caller = decision.identity;
+    }
+
+    // The control panel rides on the same Worker and the same policy code.
+    // Anything that is not a panel route falls through to MCP untouched.
+    const { pathname } = new URL(request.url);
+
+    if (pathname === "/" && request.method === "GET") {
+      return new Response(controlPanelHtml, {
+        headers: {
+          "content-type": "text/html; charset=utf-8",
+          // The page has no third-party anything, so say so.
+          "content-security-policy":
+            "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; connect-src 'self'; base-uri 'none'; form-action 'none'",
+          "referrer-policy": "no-referrer",
+          "x-content-type-options": "nosniff",
+        },
+      });
+    }
+
+    if (pathname === "/api/config") {
+      if (request.method !== "GET") return json({ error: "method not allowed" }, 405);
+      return json(configPayload(env));
+    }
+
+    if (pathname === "/api/validate") {
+      if (request.method !== "POST") return json({ error: "method not allowed" }, 405);
+      let body: unknown;
+      try {
+        body = await request.json();
+      } catch {
+        return json({ outcome: "invalid", reason: "Send a JSON body with a url field." }, 400);
+      }
+      const url = (body as { url?: unknown } | null)?.url;
+      const result = await validateTarget(url, parseAllowlist(env.ALLOWED_HOSTS));
+      logCall({
+        caller,
+        source: "control-panel",
+        decision: result.outcome === "allowed" ? "allow" : "deny",
+        host: typeof url === "string" ? hostForLog(url) : null,
+        reason: result.outcome === "allowed" ? undefined : result.reason,
+      });
+      return json(result);
+    }
+
+    // A fresh server per request, with this request's env and caller in scope.
+    return createMcpHandler(() => createServer(env, caller))(request, env, ctx);
   },
 } satisfies ExportedHandler<Env>;
