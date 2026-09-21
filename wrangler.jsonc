@@ -19,7 +19,7 @@
     "auth": {
       "name": "security-headers-mcp-auth",
       "vars": {
-        "ALLOWED_HOSTS": "example.com,cloudflare.com",
+        "ALLOWED_HOSTS": "example.com,cloudflare.com,devenperkins.com ",
         "REQUIRE_ACCESS": "true",
         "TEAM_DOMAIN": "https://devdevs.cloudflareaccess.com",
         "POLICY_AUD": "451ab93dad41e449b2a5d573c6568b51e4f6ed109b100adbb71a5110380eb984"
