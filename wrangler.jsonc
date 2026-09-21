@@ -7,7 +7,7 @@
   // Workers Logs: structured console.log output becomes queryable fields.
   "observability": { "enabled": true },
 "vars": {
-    "ALLOWED_HOSTS": "example.com,cloudflare.com",
+    "ALLOWED_HOSTS": "example.com,cloudflare.com,devenperkins.com",
     // Access enforcement is off on this Worker. The auth environment turns it on.
     "REQUIRE_ACCESS": "false",
     "TEAM_DOMAIN": "",
